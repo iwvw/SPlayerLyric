@@ -17,6 +17,7 @@ TrafficMonitor 的 SPlayer 歌词任务栏显示插件
 ### 前提条件
 
 1. 安装 [TrafficMonitor](https://github.com/zhongyang219/TrafficMonitor) (v1.82+)
+   > [最新版下载地址](https://github.com/zhongyang219/TrafficMonitor/releases/)
 2. 安装 [SPlayer](https://github.com/imsyy/SPlayer) 并确保 WebSocket 服务已启用
 
 ### 安装插件

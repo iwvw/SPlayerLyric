@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         configuration: [Release]
-        platform: [x64, x86]
+        platform: [x64, Win32]
 
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +54,7 @@ jobs:
       - name: Zip Artifacts
         run: |
           zip -r SPlayerLyric-x64.zip SPlayerLyric-x64
-          zip -r SPlayerLyric-x86.zip SPlayerLyric-x86
+          zip -r SPlayerLyric-x86.zip SPlayerLyric-Win32
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
