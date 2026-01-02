@@ -1,10 +1,11 @@
 /*
  * SPlayerLyric - SPlayer Lyric Display Plugin for TrafficMonitor
- * 
+ *
  * Lyric Manager Implementation
  */
 
 #include "pch.h"
+#include <afxwin.h>
 #include "LyricManager.h"
 #include "Config.h"
 #include <algorithm>
@@ -109,6 +110,29 @@ std::wstring LyricManager::GetNextLyricText() const
         if (nextIndex >= 0 && nextIndex < (int)m_lyricData.lrcData.size())
         {
             return m_lyricData.lrcData[nextIndex].text;
+        }
+    }
+
+    return std::wstring();
+}
+
+std::wstring LyricManager::GetCurrentTranslation() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    // Get translation from current line's translation field
+    if (g_config.Data().enableYrc && m_lyricData.hasYrc())
+    {
+        if (m_currentLineIndex >= 0 && m_currentLineIndex < (int)m_lyricData.yrcData.size())
+        {
+            return m_lyricData.yrcData[m_currentLineIndex].translation;
+        }
+    }
+    else if (m_lyricData.hasLrc())
+    {
+        if (m_currentLineIndex >= 0 && m_currentLineIndex < (int)m_lyricData.lrcData.size())
+        {
+            return m_lyricData.lrcData[m_currentLineIndex].translation;
         }
     }
 

@@ -5,7 +5,9 @@
  */
 
 #include "pch.h"
+#include <afxwin.h>
 #include "WebSocketClient.h"
+#include <ws2tcpip.h>
 #include "Config.h"
 #include <sstream>
 #include <random>
@@ -527,6 +529,11 @@ void WebSocketClient::ParseMessage(const std::string& message)
                         SPlayerProtocol::LrcLine line;
                         line.time = item.value("startTime", (int64_t)0);
                         
+                        // Get translation from translatedLyric field
+                        std::string transText = item.value("translatedLyric", "");
+                        if (!transText.empty())
+                            line.translation = Utf8ToWideLocal(transText);
+                        
                         // Get text from words array
                         if (item.contains("words") && item["words"].is_array() && !item["words"].empty())
                         {
@@ -553,6 +560,11 @@ void WebSocketClient::ParseMessage(const std::string& message)
                         SPlayerProtocol::YrcLine line;
                         line.startTime = item.value("startTime", (int64_t)0);
                         line.endTime = item.value("endTime", (int64_t)0);
+                        
+                        // Get translation from translatedLyric field
+                        std::string transText = item.value("translatedLyric", "");
+                        if (!transText.empty())
+                            line.translation = Utf8ToWideLocal(transText);
 
                         if (item.contains("words") && item["words"].is_array())
                         {
@@ -573,9 +585,22 @@ void WebSocketClient::ParseMessage(const std::string& message)
                     }
                 }
 
+                // Parse transData
+                if (data.contains("transData") && data["transData"].is_array())
+                {
+                    for (auto& item : data["transData"])
+                    {
+                        SPlayerProtocol::LrcLine line;
+                        line.time = item.value("startTime", (int64_t)0);
+                        line.text = Utf8ToWideLocal(item.value("word", ""));
+                        if (!line.text.empty())
+                            lyricData.transData.push_back(line);
+                    }
+                }
+
                 wchar_t buf[128];
-                swprintf_s(buf, L"[SPlayerLyric] Parsed LRC=%zu, YRC=%zu\n",
-                    lyricData.lrcData.size(), lyricData.yrcData.size());
+                swprintf_s(buf, L"[SPlayerLyric] Parsed LRC=%zu, YRC=%zu, TRANS=%zu\n",
+                    lyricData.lrcData.size(), lyricData.yrcData.size(), lyricData.transData.size());
                 OutputDebugStringW(buf);
 
                 m_callbacks.onLyricChange(lyricData);

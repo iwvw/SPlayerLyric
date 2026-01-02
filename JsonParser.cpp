@@ -5,6 +5,7 @@
  */
 
 #include "pch.h"
+#include <Windows.h>
 #include "JsonParser.h"
 #include <cctype>
 #include <cstdlib>

@@ -10,15 +10,19 @@
 #include "WebSocketClient.h"
 #include "Config.h"
 
-// Note: Timer-based high-FPS refresh doesn't work with TrafficMonitor's architecture
-// TrafficMonitor only calls DrawItem in its own timer callback (~1 second interval)
+// Static instance pointer for timer callback
+static LyricDisplayItem* g_pLyricItem = nullptr;
 
 LyricDisplayItem::LyricDisplayItem()
 {
+    g_pLyricItem = this;
 }
 
 LyricDisplayItem::~LyricDisplayItem()
 {
+    StopHighFreqRefresh();
+    g_pLyricItem = nullptr;
+    
     if (m_font != nullptr)
     {
         DeleteObject(m_font);
@@ -28,7 +32,14 @@ LyricDisplayItem::~LyricDisplayItem()
 
 const wchar_t* LyricDisplayItem::GetItemName() const
 {
-    return g_config.StringRes(IDS_LYRIC_ITEM_NAME);
+    if (m_itemName.empty())
+    {
+        AFX_MANAGE_STATE(AfxGetStaticModuleState());
+        CString str;
+        str.LoadString(IDS_LYRIC_ITEM_NAME);
+        m_itemName = str.GetString();
+    }
+    return m_itemName.c_str();
 }
 
 const wchar_t* LyricDisplayItem::GetItemId() const
@@ -191,6 +202,12 @@ void LyricDisplayItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark
     HDC dc = static_cast<HDC>(hDC);
     const auto& config = g_config.Data();
 
+    // Hide when not playing if enabled
+    if (config.hideWhenNotPlaying && (!g_wsClient.IsConnected() || !g_lyricMgr.IsPlaying()))
+    {
+        return;
+    }
+
     // Set font
     HFONT font = GetFont(dc);
     HFONT oldFont = nullptr;
@@ -202,7 +219,7 @@ void LyricDisplayItem::DrawItem(void* hDC, int x, int y, int w, int h, bool dark
     SetBkMode(dc, TRANSPARENT);
 
     // Check if dual line display is enabled
-    if (config.dualLineDisplay)
+    if (config.desktopDualLine)
     {
         DrawDualLine(dc, x, y, w, h, dark_mode);
     }
@@ -227,6 +244,19 @@ void LyricDisplayItem::DrawDualLine(HDC dc, int x, int y, int w, int h, bool dar
 {
     const auto& config = g_config.Data();
     
+    // Create font for dual line mode (uses dualLineFontSize instead of fontSize)
+    int dpi = GetDeviceCaps(dc, LOGPIXELSY);
+    int fontHeight = -MulDiv(config.dualLineFontSize, dpi, 72);
+    HFONT dualFont = CreateFontW(
+        fontHeight, 0, 0, 0,
+        config.fontWeightBold ? FW_BOLD : FW_NORMAL,
+        FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+        config.fontName.c_str()
+    );
+    HFONT oldFont = (HFONT)SelectObject(dc, dualFont);
+    
     // Get current and second line text
     std::wstring line1 = g_lyricMgr.GetCurrentLyricText();
     std::wstring line2;
@@ -236,10 +266,15 @@ void LyricDisplayItem::DrawDualLine(HDC dc, int x, int y, int w, int h, bool dar
         // Next line
         line2 = g_lyricMgr.GetNextLyricText();
     }
+    else if (config.secondLineType == 1)
+    {
+        // Translation
+        line2 = g_lyricMgr.GetCurrentTranslation();
+    }
     else
     {
-        // Translation - TODO: implement translation support
-        line2 = L"";
+        // Artist/Song info
+        line2 = g_lyricMgr.GetSongInfoText();
     }
     
     // If no current lyric, show song info or default
@@ -258,57 +293,218 @@ void LyricDisplayItem::DrawDualLine(HDC dc, int x, int y, int w, int h, bool dar
         line2.clear();
     }
     
-    // Calculate line heights
+    // If second line is empty, and we are not in "Artist" mode, check if we should show single line
+    if (line2.empty() && config.secondLineType != 2)
+    {
+        // Restore old font and use DrawSimpleText instead to use the larger font size if appropriate,
+        // OR just draw it centered here with the current dual line font.
+        // The user said "single line display", usually implying the standard single line look.
+        
+        SelectObject(dc, oldFont);
+        DeleteObject(dualFont);
+        
+        DrawSimpleText(dc, x, y, w, h, dark_mode);
+        return;
+    }
+    
+    // Fallback to song info if second line is still empty (e.g., in Artist mode but info empty)
+    if (line2.empty())
+    {
+        line2 = g_lyricMgr.GetSongInfoText();
+    }
+
+    // Double check if we still have only one line after fallback
+    if (line2.empty())
+    {
+        SelectObject(dc, oldFont);
+        DeleteObject(dualFont);
+        DrawSimpleText(dc, x, y, w, h, dark_mode);
+        return;
+    }
+    
+    // Calculate layout
+    // Instead of h/2, we'll give each line a bit more breathing room by not clipping too strictly
     int lineHeight = h / 2;
     
-    // Set colors
-    COLORREF primaryColor = dark_mode ? RGB(255, 255, 255) : RGB(0, 0, 0);
-    COLORREF secondaryColor = config.normalColor;
+    // Set colors based on dark mode and adaptive setting
+    COLORREF primaryColor, secondaryColor, highlightColor;
     
+    // Choose color set based on mode
+    bool useDarkModeColors = dark_mode;
+    if (!config.adaptiveColor)
+    {
+        // If adaptive disabled, maybe force dark mode colors (legacy behavior) or stick to user preference?
+        // Let's assume non-adaptive means using the "Dark" set (or the legacy set which mapped to Dark)
+        useDarkModeColors = true; 
+    }
+
+    if (useDarkModeColors)
+    {
+        primaryColor = config.darkNormalColor;
+        // For secondary, we can make it slightly dimmer or same as primary
+        // Let's make it 80% brightness of primary or just hardcoded dim if user doesn't specify secondary
+        // Since we only have "Normal" and "Highlight" in config, we derive secondary line color.
+        // Simple approach: Secondary is same as Primary for now, or slight transparency if we could? 
+        // GDI doesn't support alpha easily. Let's stick to Primary.
+        // Actually, user requested "Deep/Light mode color customization". 
+        // We have lightNormalColor and darkNormalColor.
+        
+        secondaryColor = primaryColor; 
+        
+        // To distinguish secondary line, maybe hardcode a dimmer simple calculation or just use same color.
+        // Previous hardcoded logic: RGB(200, 200, 200) vs White.
+        // Let's try to slightly dim it if it's near white.
+        if (GetRValue(primaryColor) > 200 && GetGValue(primaryColor) > 200 && GetBValue(primaryColor) > 200)
+             secondaryColor = RGB(200, 200, 200);
+             
+        highlightColor = config.darkHighlightColor;
+    }
+    else
+    {
+        primaryColor = config.lightNormalColor;
+        secondaryColor = primaryColor;
+        // Dim slightly if near black?
+        if (GetRValue(primaryColor) < 50 && GetGValue(primaryColor) < 50 && GetBValue(primaryColor) < 50)
+             secondaryColor = RGB(80, 80, 80);
+             
+        highlightColor = config.lightHighlightColor;
+    }
+    
+    // Dim if not playing
     if (!g_wsClient.IsConnected() || !g_lyricMgr.IsPlaying())
     {
-        primaryColor = dark_mode ? RGB(150, 150, 150) : RGB(100, 100, 100);
+        if (dark_mode)
+        {
+            primaryColor = RGB(150, 150, 150);
+            secondaryColor = RGB(120, 120, 120);
+        }
+        else
+        {
+            primaryColor = RGB(100, 100, 100);
+            secondaryColor = RGB(130, 130, 130);
+        }
     }
     
-    // Draw first line (current lyric)
-    SetTextColor(dc, primaryColor);
-    SIZE size1;
-    GetTextExtentPoint32W(dc, line1.c_str(), (int)line1.length(), &size1);
-    
-    int textY1 = y + (lineHeight - size1.cy) / 2;
-    int textX1 = x + 5;
-    
-    // Apply scroll if needed
-    if (config.enableScrolling && size1.cx > w - 10)
+    // Draw first line (current lyric) - use top half
+    // If YRC is enabled, use word-by-word discrete highlight for the first line
+    auto words = g_lyricMgr.GetCurrentYrcWords();
+    if (config.enableYrc && !words.empty() && g_wsClient.IsConnected() && g_lyricMgr.IsPlaying())
     {
-        UpdateScrollAnimation(size1.cx, w - 10);
-        textX1 -= (int)m_scrollOffset;
-    }
-    
-    // Create clip region for first line
-    HRGN clipRgn1 = CreateRectRgn(x, y, x + w, y + lineHeight);
-    SelectClipRgn(dc, clipRgn1);
-    TextOutW(dc, textX1, textY1, line1.c_str(), (int)line1.length());
-    SelectClipRgn(dc, NULL);
-    DeleteObject(clipRgn1);
-    
-    // Draw second line if available
-    if (!line2.empty())
-    {
-        SetTextColor(dc, secondaryColor);
-        SIZE size2;
-        GetTextExtentPoint32W(dc, line2.c_str(), (int)line2.length(), &size2);
+        int64_t currentTime = g_lyricMgr.GetCurrentTime();
+        // Use the highlightColor determined by adaptive logic above, do NOT re-read from config
         
-        int textY2 = y + lineHeight + (lineHeight - size2.cy) / 2;
-        int textX2 = x + 5;
+        // Calculate total width of YRC words
+        int totalWidth = 0;
+        std::vector<SIZE> wordSizes;
+        for (const auto& word : words)
+        {
+            SIZE sz;
+            GetTextExtentPoint32W(dc, word.text.c_str(), (int)word.text.length(), &sz);
+            wordSizes.push_back(sz);
+            totalWidth += sz.cx;
+        }
+
+        // Calculate alignment X
+        int textX1 = x + 5; // Default Left
+        if (totalWidth < w) // Only apply alignment if text fits (otherwise we scroll)
+        {
+            if (config.dualLineAlignment == 1) // Center
+                textX1 = x + (w - totalWidth) / 2;
+            else if (config.dualLineAlignment == 2) // Right
+                textX1 = x + w - totalWidth - 5;
+            else if (config.dualLineAlignment == 3) // Split (Line 1 Left)
+                textX1 = x + 5;
+        }
+
+        // Apply scroll if needed (override alignment if scrolling)
+        if (config.enableScrolling && totalWidth > w - 10)
+        {
+            UpdateScrollAnimation(totalWidth, w - 10);
+            textX1 = x + 5 - (int)m_scrollOffset;
+        }
+
+        int textY1 = y + (lineHeight - (wordSizes.empty() ? 0 : wordSizes[0].cy)) / 2;
+
+        // Clip region for first line
+        HRGN clipRgn1 = CreateRectRgn(x, y, x + w, y + lineHeight + 2);
+        SelectClipRgn(dc, clipRgn1);
+
+        int curX = textX1;
+        for (size_t i = 0; i < words.size(); ++i)
+        {
+            bool isHighlighted = (currentTime >= words[i].startTime);
+            SetTextColor(dc, isHighlighted ? highlightColor : primaryColor);
+            TextOutW(dc, curX, textY1, words[i].text.c_str(), (int)words[i].text.length());
+            curX += wordSizes[i].cx;
+        }
         
-        // Create clip region for second line
-        HRGN clipRgn2 = CreateRectRgn(x, y + lineHeight, x + w, y + h);
-        SelectClipRgn(dc, clipRgn2);
-        TextOutW(dc, textX2, textY2, line2.c_str(), (int)line2.length());
         SelectClipRgn(dc, NULL);
-        DeleteObject(clipRgn2);
+        DeleteObject(clipRgn1);
     }
+    else
+    {
+        // Simple text for first line
+        SetTextColor(dc, primaryColor);
+        SIZE size1;
+        GetTextExtentPoint32W(dc, line1.c_str(), (int)line1.length(), &size1);
+        
+        int textY1 = y + (lineHeight - size1.cy) / 2;
+        int textX1 = x + 5; // Default Left
+        
+        if (size1.cx < w)
+        {
+            if (config.dualLineAlignment == 1) // Center
+                textX1 = x + (w - size1.cx) / 2;
+            else if (config.dualLineAlignment == 2) // Right
+                textX1 = x + w - size1.cx - 5;
+            else if (config.dualLineAlignment == 3) // Split (Line 1 Left)
+                textX1 = x + 5;
+        }
+        
+        if (config.enableScrolling && size1.cx > w - 10)
+        {
+            UpdateScrollAnimation(size1.cx, w - 10);
+            textX1 = x + 5 - (int)m_scrollOffset;
+        }
+        
+        HRGN clipRgn1 = CreateRectRgn(x, y, x + w, y + lineHeight + 2);
+        SelectClipRgn(dc, clipRgn1);
+        TextOutW(dc, textX1, textY1, line1.c_str(), (int)line1.length());
+        SelectClipRgn(dc, NULL);
+        DeleteObject(clipRgn1);
+    }
+    
+    // Draw second line
+    SetTextColor(dc, secondaryColor);
+    SIZE size2;
+    GetTextExtentPoint32W(dc, line2.c_str(), (int)line2.length(), &size2);
+    
+    int textY2 = y + lineHeight + (lineHeight - size2.cy) / 2;
+    int textX2 = x + 5;
+    
+    // Apply alignment for second line
+    if (size2.cx < w) // Only if fits
+    {
+        if (config.dualLineAlignment == 1) // Center
+            textX2 = x + (w - size2.cx) / 2;
+        else if (config.dualLineAlignment == 2) // Right
+            textX2 = x + w - size2.cx - 5;
+        else if (config.dualLineAlignment == 3) // Split (Line 2 Right)
+            textX2 = x + w - size2.cx - 5;
+    }
+    
+    // Scrolling for second line (independent or just static?) - keep it static for now as per design
+    
+    // Clip for second line - allow a bit room at top for ascenders
+    HRGN clipRgn2 = CreateRectRgn(x, y + lineHeight - 1, x + w, y + h);
+    SelectClipRgn(dc, clipRgn2);
+    TextOutW(dc, textX2, textY2, line2.c_str(), (int)line2.length());
+    SelectClipRgn(dc, NULL);
+    DeleteObject(clipRgn2);
+    
+    // Restore original font and cleanup
+    SelectObject(dc, oldFont);
+    DeleteObject(dualFont);
 }
 
 void LyricDisplayItem::DrawSimpleText(HDC dc, int x, int y, int w, int h, bool dark_mode)
@@ -317,13 +513,18 @@ void LyricDisplayItem::DrawSimpleText(HDC dc, int x, int y, int w, int h, bool d
     if (text.empty())
         return;
 
-    // Set text color
+    // Set text color based on dark mode
     COLORREF textColor;
-    if (dark_mode)
-        textColor = RGB(255, 255, 255);
-    else
-        textColor = RGB(0, 0, 0);
+    
+    bool useDarkModeColors = dark_mode;
+    if (!g_config.Data().adaptiveColor) useDarkModeColors = true; // Force dark set if not adaptive
 
+    if (useDarkModeColors)
+        textColor = g_config.Data().darkNormalColor;
+    else
+        textColor = g_config.Data().lightNormalColor;
+
+    // Dim if not playing
     if (!g_wsClient.IsConnected() || !g_lyricMgr.IsPlaying())
     {
         if (dark_mode)
@@ -382,9 +583,37 @@ void LyricDisplayItem::DrawWithYrcHighlight(HDC dc, int x, int y, int w, int h, 
     int64_t currentTime = g_lyricMgr.GetCurrentTime();
     const auto& config = g_config.Data();
 
-    // Define colors - use configured colors
-    COLORREF normalColor = config.normalColor;
-    COLORREF highlightColor = config.highlightColor;
+    // Set colors based on dark mode
+    COLORREF normalColor, highlightColor;
+    
+    bool useDarkModeColors = dark_mode;
+    if (!config.adaptiveColor) useDarkModeColors = true;
+
+    if (useDarkModeColors)
+    {
+        normalColor = config.darkNormalColor;
+        highlightColor = config.darkHighlightColor;
+    }
+    else
+    {
+        normalColor = config.lightNormalColor;
+        highlightColor = config.lightHighlightColor;
+    }
+
+    // Dim if not playing
+    if (!g_wsClient.IsConnected() || !g_lyricMgr.IsPlaying())
+    {
+        if (dark_mode)
+        {
+            normalColor = RGB(120, 120, 120);
+            highlightColor = RGB(150, 150, 150);
+        }
+        else
+        {
+            normalColor = RGB(150, 150, 150);
+            highlightColor = RGB(100, 100, 100);
+        }
+    }
 
     // First pass: calculate total width
     int totalWidth = 0;
@@ -432,55 +661,21 @@ void LyricDisplayItem::DrawWithYrcHighlight(HDC dc, int x, int y, int w, int h, 
         const auto& word = words[i];
         const auto& size = wordSizes[i];
 
-        // Calculate highlight progress for this word
-        float progress = 0.0f;
-        if (currentTime >= word.startTime + word.duration)
-        {
-            progress = 1.0f; // Fully highlighted
-        }
-        else if (currentTime >= word.startTime)
-        {
-            progress = (float)(currentTime - word.startTime) / (float)word.duration;
-        }
+        // Calculate highlight (discrete: either highlighted or not)
+        bool isHighlighted = (currentTime >= word.startTime);
 
-        if (progress >= 1.0f)
+        if (isHighlighted)
         {
             // Fully highlighted
             SetTextColor(dc, highlightColor);
             TextOutW(dc, currentX, textY, word.text.c_str(), (int)word.text.length());
         }
-        else if (progress <= 0.0f)
+        else
         {
             // Not highlighted
             SetTextColor(dc, normalColor);
             TextOutW(dc, currentX, textY, word.text.c_str(), (int)word.text.length());
         }
-        else
-        {
-            // Partial highlight - draw in two parts
-            int highlightWidth = (int)(size.cx * progress);
-
-            // Create clip for highlighted part
-            HRGN hlRgn = CreateRectRgn(currentX, y, currentX + highlightWidth, y + h);
-            SelectClipRgn(dc, hlRgn);
-            SetTextColor(dc, highlightColor);
-            TextOutW(dc, currentX, textY, word.text.c_str(), (int)word.text.length());
-            DeleteObject(hlRgn);
-
-            // Create clip for normal part
-            HRGN nmRgn = CreateRectRgn(currentX + highlightWidth, y, currentX + size.cx, y + h);
-            SelectClipRgn(dc, nmRgn);
-            SetTextColor(dc, normalColor);
-            TextOutW(dc, currentX, textY, word.text.c_str(), (int)word.text.length());
-            DeleteObject(nmRgn);
-
-            // Restore main clip
-            if (clipRgn)
-                SelectClipRgn(dc, clipRgn);
-            else
-                SelectClipRgn(dc, NULL);
-        }
-
         currentX += size.cx;
     }
 
@@ -493,6 +688,12 @@ void LyricDisplayItem::DrawWithYrcHighlight(HDC dc, int x, int y, int w, int h, 
 
 int LyricDisplayItem::OnMouseEvent(MouseEventType type, int x, int y, void* hWnd, int flag)
 {
+    // Save taskbar window handle for high-frequency refresh
+    if (flag & MF_TASKBAR_WND)
+    {
+        m_taskbarWnd = (HWND)hWnd;
+    }
+    
     switch (type)
     {
     case MT_LCLICKED:
@@ -515,5 +716,43 @@ int LyricDisplayItem::OnMouseEvent(MouseEventType type, int x, int y, void* hWnd
 
     default:
         return 0;
+    }
+}
+
+// High-frequency refresh timer callback
+void CALLBACK LyricDisplayItem::HighFreqTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime)
+{
+    if (g_pLyricItem && g_pLyricItem->m_highFreqEnabled && g_pLyricItem->m_taskbarWnd)
+    {
+        // Only refresh when YRC is enabled and playing
+        if (g_config.Data().enableYrc && g_lyricMgr.IsPlaying() && g_lyricMgr.HasYrcData())
+        {
+            // Invalidate the entire taskbar window to trigger redraw
+            // TrafficMonitor will call DrawItem when processing WM_PAINT
+            InvalidateRect(g_pLyricItem->m_taskbarWnd, NULL, FALSE);
+        }
+    }
+}
+
+void LyricDisplayItem::StartHighFreqRefresh()
+{
+    if (m_highFreqTimerId == 0)
+    {
+        // Create timer with ~100ms interval (10 FPS boost)
+        // Using NULL for hwnd makes it a thread timer
+        m_highFreqTimerId = SetTimer(NULL, 0, 100, HighFreqTimerProc);
+        m_highFreqEnabled = true;
+        OutputDebugStringW(L"[SPlayerLyric] High-frequency refresh started\n");
+    }
+}
+
+void LyricDisplayItem::StopHighFreqRefresh()
+{
+    if (m_highFreqTimerId != 0)
+    {
+        KillTimer(NULL, m_highFreqTimerId);
+        m_highFreqTimerId = 0;
+        m_highFreqEnabled = false;
+        OutputDebugStringW(L"[SPlayerLyric] High-frequency refresh stopped\n");
     }
 }

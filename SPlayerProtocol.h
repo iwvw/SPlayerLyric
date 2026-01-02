@@ -52,6 +52,7 @@ namespace SPlayerProtocol
     {
         int64_t time = 0;
         std::wstring text;
+        std::wstring translation;  // translatedLyric from SPlayer
     };
 
     struct YrcWord
@@ -66,12 +67,14 @@ namespace SPlayerProtocol
         int64_t startTime = 0;
         int64_t endTime = 0;
         std::vector<YrcWord> words;
+        std::wstring translation;  // translatedLyric from SPlayer
     };
 
     struct LyricData
     {
         std::vector<LrcLine> lrcData;
         std::vector<YrcLine> yrcData;
+        std::vector<LrcLine> transData;
         bool hasYrc() const { return !yrcData.empty(); }
         bool hasLrc() const { return !lrcData.empty(); }
         bool empty() const { return lrcData.empty() && yrcData.empty(); }

@@ -136,17 +136,32 @@ void SPlayerLyricPlugin::InitWebSocketCallbacks()
 {
     WebSocketCallbacks callbacks;
 
-    callbacks.onConnected = []() {
+    callbacks.onConnected = [this]() {
         OutputDebugStringW(L"[SPlayerLyric] Connected to SPlayer\n");
+        // Start high-frequency refresh if YRC is enabled
+        if (g_config.Data().enableYrc)
+        {
+            m_lyricItem.StartHighFreqRefresh();
+        }
     };
 
-    callbacks.onDisconnected = []() {
+    callbacks.onDisconnected = [this]() {
         g_lyricMgr.Clear();
+        m_lyricItem.StopHighFreqRefresh();
         OutputDebugStringW(L"[SPlayerLyric] Disconnected from SPlayer\n");
     };
 
-    callbacks.onStatusChange = [](bool isPlaying) {
+    callbacks.onStatusChange = [this](bool isPlaying) {
         g_lyricMgr.UpdatePlayStatus(isPlaying);
+        // Control high-frequency refresh based on play status
+        if (isPlaying && g_config.Data().enableYrc && g_lyricMgr.HasYrcData())
+        {
+            m_lyricItem.StartHighFreqRefresh();
+        }
+        else if (!isPlaying)
+        {
+            m_lyricItem.StopHighFreqRefresh();
+        }
     };
 
     callbacks.onSongChange = [](const SPlayerProtocol::SongInfo& info) {
@@ -157,8 +172,13 @@ void SPlayerLyricPlugin::InitWebSocketCallbacks()
         g_lyricMgr.UpdateProgress(info.currentTime);
     };
 
-    callbacks.onLyricChange = [](const SPlayerProtocol::LyricData& data) {
+    callbacks.onLyricChange = [this](const SPlayerProtocol::LyricData& data) {
         g_lyricMgr.UpdateLyrics(data);
+        // Start high-frequency refresh if YRC data is available and playing
+        if (g_config.Data().enableYrc && data.hasYrc() && g_lyricMgr.IsPlaying())
+        {
+            m_lyricItem.StartHighFreqRefresh();
+        }
     };
 
     callbacks.onError = [](const std::string& msg) {

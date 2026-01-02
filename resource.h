@@ -1,4 +1,4 @@
-//{{NO_DEPENDENCIES}}
+﻿//{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
 // Used by SPlayerLyric.rc
 //
@@ -27,6 +27,23 @@
 #define IDC_BTN_NORMAL_COLOR            1017
 #define IDC_CHECK_DUALLINE              1018
 #define IDC_COMBO_SECONDLINE            1019
+#define IDC_EDIT_DESKTOP_X              1020
+#define IDC_STATIC_DESKTOP_X            1021
+#define IDC_EDIT_DESKTOP_ALPHA          1022
+#define IDC_STATIC_DESKTOP_ALPHA        1023
+#define IDC_CHECK_DESKTOP_DUALLINE      1024
+#define IDC_BTN_APPLY                   1025
+#define IDC_CHECK_AUTOSTART              1027
+#define IDC_CHECK_HIDE_NOT_PLAYING       1028
+#define IDC_EDIT_DUALLINE_FONTSIZE       1029
+
+#define WM_SETTINGS_CHANGED             (WM_USER + 100)
+
+#define IDC_CHECK_ADAPTIVE_COLOR         1030
+#define IDC_STATIC_LIGHT_MODE_GROUP      1031
+#define IDC_BTN_LIGHT_HIGHLIGHT          1032
+#define IDC_BTN_LIGHT_NORMAL             1033
+#define IDC_COMBO_ALIGNMENT              1035
 
 // Next default values for new objects
 // 
@@ -34,7 +51,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        201
 #define _APS_NEXT_COMMAND_VALUE         32768
-#define _APS_NEXT_CONTROL_VALUE         1011
+#define _APS_NEXT_CONTROL_VALUE         1034
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

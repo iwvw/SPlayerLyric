@@ -8,6 +8,7 @@
 
 #include "PluginInterface.h"
 #include <string>
+#include <atomic>
 
 class LyricDisplayItem : public IPluginItem
 {
@@ -28,6 +29,10 @@ public:
 
     virtual int OnMouseEvent(MouseEventType type, int x, int y, void* hWnd, int flag) override;
 
+    // High-frequency refresh control
+    void StartHighFreqRefresh();
+    void StopHighFreqRefresh();
+
 private:
     std::wstring GetDisplayText() const;
     HFONT GetFont(HDC hDC) const;
@@ -36,6 +41,8 @@ private:
     void DrawDualLine(HDC dc, int x, int y, int w, int h, bool dark_mode);
     void DrawWithYrcHighlight(HDC dc, int x, int y, int w, int h, bool dark_mode);
     void UpdateScrollAnimation(int textWidth, int areaWidth);
+    
+    static void CALLBACK HighFreqTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 
     mutable HFONT m_font = nullptr;
     mutable int m_lastFontSize = 0;
@@ -46,4 +53,12 @@ private:
     mutable float m_scrollOffset = 0.0f;
     mutable ULONGLONG m_scrollStartTime = 0;
     mutable ULONGLONG m_scrollCycleLength = 0;
+
+    // High-frequency refresh for smooth YRC
+    mutable HWND m_taskbarWnd = nullptr;
+    mutable RECT m_itemRect = {0};
+    mutable UINT_PTR m_highFreqTimerId = 0;
+    mutable std::atomic<bool> m_highFreqEnabled{false};
+    
+    mutable std::wstring m_itemName;
 };
