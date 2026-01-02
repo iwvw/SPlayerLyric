@@ -61,4 +61,10 @@ private:
     mutable std::atomic<bool> m_highFreqEnabled{false};
     
     mutable std::wstring m_itemName;
+
+    // Transition state
+    mutable int m_lastLineIndex = -1;
+    mutable ULONGLONG m_transitionStartTime = 0;
+    mutable std::wstring m_prevLineText;
+    mutable bool m_inTransition = false;
 };

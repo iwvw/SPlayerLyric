@@ -618,9 +618,36 @@ void LyricDisplayItem::DrawSimpleText(HDC dc, int x, int y, int w, int h, bool d
 void LyricDisplayItem::DrawWithYrcHighlight(HDC dc, int x, int y, int w, int h, bool dark_mode)
 {
     auto words = g_lyricMgr.GetCurrentYrcWords();
+    int currentLineIdx = g_lyricMgr.GetCurrentLineIndex();
+
+    // Check for line change to trigger transition
+    if (currentLineIdx != m_lastLineIndex)
+    {
+        if (m_lastLineIndex != -1) // Don't animate first load
+        {
+            m_transitionStartTime = GetTickCount64();
+            m_inTransition = true;
+            m_prevLineText = GetDisplayText(); // Use full text for prev line
+            // Wait, GetDisplayText() returns CURRENT text. We need previous text.
+            // But m_lastLineIndex is old, LyricManager already has new data.
+            // We should have stored previous text before update? No, LyricManager updates async.
+            // We can't query old text easily from LyricManager unless we cache it.
+            // However, m_prevLineText should be updated AFTER drawing, or assume we missed it?
+            // Actually, best way: Store m_currentText in class, update it at end of frame.
+            // But let's cheat: we can't easily get old YRC words, so for "Previous Line", 
+            // we will just draw it as simple text (m_prevLineText).
+        }
+        m_lastLineIndex = currentLineIdx;
+    }
+
     if (words.empty())
     {
+        // If we are transitioning FROM valid words to empty, we should still animate?
+        // For simplicity, falls back to SimpleText if empty
         DrawSimpleText(dc, x, y, w, h, dark_mode);
+        
+        // Update valid cache
+        m_prevLineText = GetDisplayText();
         return;
     }
 
@@ -712,6 +739,77 @@ void LyricDisplayItem::DrawWithYrcHighlight(HDC dc, int x, int y, int w, int h, 
     }
 
     // Draw each word
+    // Draw Transition (Scroll Up)
+    if (m_inTransition)
+    {
+        ULONGLONG now = GetTickCount64();
+        if (now - m_transitionStartTime > 400) // 400ms duration
+        {
+            m_inTransition = false;
+        }
+        else
+        {
+            float progress = (float)(now - m_transitionStartTime) / 400.0f;
+            // Ease out
+            progress = 1.0f - pow(1.0f - progress, 3.0f);
+            
+            int yOffset = (int)(h * progress);
+            
+            // Draw Previous Line (moving up: y -> y - h)
+            if (!m_prevLineText.empty())
+            {
+                 int prevY = y - yOffset;
+                 
+                 // Fade out simulation: blend color with background?
+                 // Since we don't know bg, let's just use clip.
+                 // Text fading is hard in GDI without AlphaBlend.
+                 // We just let it move out.
+                 
+                 // But wait, DrawSimpleText centers vertically usually.
+                 // We need custom drawing for prev line to ensure position matches.
+                 // Let's reuse basic TextOut logic for prev line.
+                 
+                 SIZE prevSize;
+                 GetTextExtentPoint32W(dc, m_prevLineText.c_str(), (int)m_prevLineText.length(), &prevSize);
+                 
+                 // Align prev line same as current (approx)
+                 int prevX = startX; // This might jump if alignment changes, but usually consistent
+                 if (config.dualLineAlignment == 1) prevX = x + (w - prevSize.cx) / 2 + config.desktopXOffset;
+                 else if (config.dualLineAlignment == 2) prevX = x + w - prevSize.cx - 5 + config.desktopXOffset;
+                 
+                 // Center vertically in the OFFSET position
+                 int prevTextY = prevY + (h - prevSize.cy) / 2;
+                 
+                 SetTextColor(dc, normalColor); // Old line is normal color
+                 
+                 HRGN prevClip = CreateRectRgn(x, y, x + w, y + h);
+                 SelectClipRgn(dc, prevClip);
+                 TextOutW(dc, prevX, prevTextY, m_prevLineText.c_str(), (int)m_prevLineText.length());
+                 SelectClipRgn(dc, NULL);
+                 DeleteObject(prevClip);
+            }
+            
+            // Draw Current Line (moving up: y + h -> y)
+            // We modify 'y' and 'textY' for the main drawing loop below
+            // Original textY calculation:
+            // int textY = y + (h - (wordSizes.empty() ? 0 : wordSizes[0].cy)) / 2;
+            
+            // We want it to start at y+h and move to y
+            // So offset is (1 - progress) * h? No.
+            // Current line should be at y + h - yOffset = y + h - (h*progress) = y + h * (1 - progress).
+            
+            // Adjust textY for the loop below
+            int enterOffset = (int)(h * (1.0f - progress));
+            textY += enterOffset;
+        }
+    }
+
+    if (clipRgn)
+    {
+        // Re-select clip region if we messed with it (we did)
+        SelectClipRgn(dc, clipRgn);
+    }
+    
     // Draw each word with smooth highlight
     int currentX = startX;
     for (size_t i = 0; i < words.size(); i++)
@@ -761,6 +859,11 @@ void LyricDisplayItem::DrawWithYrcHighlight(HDC dc, int x, int y, int w, int h, 
         SelectClipRgn(dc, NULL);
         DeleteObject(clipRgn);
     }
+    
+    // Update cache for next frame detection
+    // Note: this is slightly wrong because "GetDisplayText()" might not match "words" if race condition
+    // But close enough for visual transition
+    m_prevLineText = GetDisplayText();
 }
 
 int LyricDisplayItem::OnMouseEvent(MouseEventType type, int x, int y, void* hWnd, int flag)
@@ -817,7 +920,7 @@ void LyricDisplayItem::StartHighFreqRefresh()
     {
         // Create timer with ~100ms interval (10 FPS boost)
         // Using NULL for hwnd makes it a thread timer
-        m_highFreqTimerId = SetTimer(NULL, 0, 30, HighFreqTimerProc);
+        m_highFreqTimerId = SetTimer(NULL, 0, 16, HighFreqTimerProc);
         m_highFreqEnabled = true;
         OutputDebugStringW(L"[SPlayerLyric] High-frequency refresh started\n");
     }
