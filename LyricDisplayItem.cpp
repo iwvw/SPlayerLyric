@@ -74,6 +74,19 @@ int LyricDisplayItem::GetItemWidthEx(void* hDC) const
 
 HFONT LyricDisplayItem::GetFont(HDC hDC) const
 {
+    // Try to capture taskbar window handle if not already captured
+    if (g_pLyricItem && g_pLyricItem->m_taskbarWnd == NULL)
+    {
+        HWND hWnd = WindowFromDC(hDC);
+        if (hWnd)
+        {
+            g_pLyricItem->m_taskbarWnd = hWnd;
+             wchar_t buf[64];
+             swprintf_s(buf, L"[SPlayerLyric] Captured hWnd from DC: %p\n", hWnd);
+             OutputDebugStringW(buf);
+        }
+    }
+
     const auto& config = g_config.Data();
 
     if (m_font == nullptr ||
@@ -580,7 +593,7 @@ void LyricDisplayItem::DrawSimpleText(HDC dc, int x, int y, int w, int h, bool d
         HRGN clipRgn = CreateRectRgn(x, y, x + w, y + h);
         SelectClipRgn(dc, clipRgn);
 
-        int textX = x - (int)m_scrollOffset;
+        int textX = x - (int)m_scrollOffset + g_config.Data().desktopXOffset; // Apply offset
         TextOutW(dc, textX, textY, text.c_str(), (int)text.length());
 
         SelectClipRgn(dc, NULL);
@@ -597,6 +610,7 @@ void LyricDisplayItem::DrawSimpleText(HDC dc, int x, int y, int w, int h, bool d
     {
         // Center
         int textX = x + (w - textSize.cx) / 2;
+        textX += g_config.Data().desktopXOffset; // Apply offset
         TextOutW(dc, textX, textY, text.c_str(), (int)text.length());
     }
 }
@@ -662,19 +676,32 @@ void LyricDisplayItem::DrawWithYrcHighlight(HDC dc, int x, int y, int w, int h, 
     int textY = y + (h - (wordSizes.empty() ? 0 : wordSizes[0].cy)) / 2;
     
     // Calculate starting X position
-    int startX;
-    if (totalWidth <= w)
+    // Calculate starting X position based on alignment
+    int startX = x + 5; // Default Left
+    
+    if (totalWidth < w)
     {
-        startX = x + (w - totalWidth) / 2;
+        if (config.dualLineAlignment == 1) // Center
+        {
+            startX = x + (w - totalWidth) / 2;
+        }
+        else if (config.dualLineAlignment == 2) // Right
+        {
+            startX = x + w - totalWidth - 5;
+        }
+        else if (config.dualLineAlignment == 3) // Split -> Line 1 Left
+        {
+            startX = x + 5;
+        }
+        // else 0 (Left) -> x + 5
     }
     else if (config.enableScrolling)
     {
-        startX = x - (int)m_scrollOffset;
+        startX = x + 5 - (int)m_scrollOffset;
     }
-    else
-    {
-        startX = x;
-    }
+    
+    // Apply global offset
+    startX += config.desktopXOffset;
 
     // Create clipping region if needed
     HRGN clipRgn = nullptr;
@@ -685,27 +712,47 @@ void LyricDisplayItem::DrawWithYrcHighlight(HDC dc, int x, int y, int w, int h, 
     }
 
     // Draw each word
+    // Draw each word with smooth highlight
     int currentX = startX;
     for (size_t i = 0; i < words.size(); i++)
     {
         const auto& word = words[i];
         const auto& size = wordSizes[i];
 
-        // Calculate highlight (discrete: either highlighted or not)
-        bool isHighlighted = (currentTime >= word.startTime);
+        // 1. Draw Background (Normal Color)
+        SetTextColor(dc, normalColor);
+        TextOutW(dc, currentX, textY, word.text.c_str(), (int)word.text.length());
 
-        if (isHighlighted)
+        // 2. Calculate Progress
+        double progress = 0.0;
+        long long endTime = word.startTime + word.duration;
+        
+        if (currentTime >= endTime)
+            progress = 1.0;
+        else if (currentTime >= word.startTime && word.duration > 0)
+            progress = (double)(currentTime - word.startTime) / word.duration;
+
+        // 3. Draw Foreground (Highlight Color) with Clip
+        if (progress > 0.001)
         {
-            // Fully highlighted
-            SetTextColor(dc, highlightColor);
-            TextOutW(dc, currentX, textY, word.text.c_str(), (int)word.text.length());
+            int fillWidth = (int)(size.cx * progress);
+            if (fillWidth > 0)
+            {
+                int saveId = SaveDC(dc);
+                
+                // Clip rect: currentX to currentX + fillWidth
+                // Must intersect with existing clip if scrolling
+                HRGN wordClip = CreateRectRgn(currentX, y, currentX + fillWidth, y + h);
+                ExtSelectClipRgn(dc, wordClip, RGN_AND);
+                
+                SetTextColor(dc, highlightColor);
+                TextOutW(dc, currentX, textY, word.text.c_str(), (int)word.text.length());
+                
+                RestoreDC(dc, saveId);
+                DeleteObject(wordClip);
+            }
         }
-        else
-        {
-            // Not highlighted
-            SetTextColor(dc, normalColor);
-            TextOutW(dc, currentX, textY, word.text.c_str(), (int)word.text.length());
-        }
+
         currentX += size.cx;
     }
 
