@@ -2,11 +2,11 @@ name: Build and Release
 
 on:
   push:
-    branches: [ "master", "main" ]
+    branches: ["master", "main"]
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
-    branches: [ "master", "main" ]
+    branches: ["master", "main"]
   workflow_dispatch:
 
 jobs:
@@ -19,22 +19,22 @@ jobs:
         platform: [x64, x86]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
 
-    - name: Build
-      working-directory: ${{env.GITHUB_WORKSPACE}}
-      run: msbuild /m /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} TrafficMonitor.sln
+      - name: Build
+        working-directory: ${{env.GITHUB_WORKSPACE}}
+        run: msbuild /m /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} SPlayerLyric.vcxproj
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: SPlayerLyric-${{ matrix.platform }}
-        path: |
-          **/Bin/${{ matrix.platform }}/${{ matrix.configuration }}/SPlayerLyric.dll
-          **/Bin/${{ matrix.platform }}/${{ matrix.configuration }}/plugins/SPlayerLyric.dll
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SPlayerLyric-${{ matrix.platform }}
+          path: |
+            **/Bin/${{ matrix.platform }}/${{ matrix.configuration }}/SPlayerLyric.dll
+            **/Bin/${{ matrix.platform }}/${{ matrix.configuration }}/plugins/SPlayerLyric.dll
 
   release:
     needs: build
@@ -43,24 +43,24 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Download Artifacts
-      uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
 
-    - name: Display structure of downloaded files
-      run: ls -R
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
 
-    - name: Zip Artifacts
-      run: |
-        zip -r SPlayerLyric-x64.zip SPlayerLyric-x64
-        zip -r SPlayerLyric-x86.zip SPlayerLyric-x86
+      - name: Display structure of downloaded files
+        run: ls -R
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          SPlayerLyric-x64.zip
-          SPlayerLyric-x86.zip
-        draft: false
-        prerelease: false
+      - name: Zip Artifacts
+        run: |
+          zip -r SPlayerLyric-x64.zip SPlayerLyric-x64
+          zip -r SPlayerLyric-x86.zip SPlayerLyric-x86
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            SPlayerLyric-x64.zip
+            SPlayerLyric-x86.zip
+          draft: false
+          prerelease: false
