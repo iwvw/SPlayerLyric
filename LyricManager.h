@@ -1,0 +1,50 @@
+/*
+ * SPlayerLyric - SPlayer Lyric Display Plugin for TrafficMonitor
+ * 
+ * Lyric Manager Interface
+ */
+
+#pragma once
+
+#include "SPlayerProtocol.h"
+#include <mutex>
+
+class LyricManager
+{
+public:
+    static LyricManager& Instance();
+
+    void UpdateLyrics(const SPlayerProtocol::LyricData& data);
+    void UpdateProgress(int64_t currentTime);
+    void UpdateSongInfo(const SPlayerProtocol::SongInfo& info);
+    void UpdatePlayStatus(bool isPlaying);
+    void Clear();
+
+    std::wstring GetCurrentLyricText() const;
+    std::wstring GetNextLyricText() const;
+    std::wstring GetSongInfoText() const;
+
+    bool HasLyric() const;
+    bool HasYrcData() const;
+    bool IsPlaying() const { return m_isPlaying; }
+    int GetCurrentLineIndex() const { return m_currentLineIndex; }
+    float GetWordProgress() const;
+    int64_t GetCurrentTime() const { return m_currentTime; }
+    
+    std::vector<SPlayerProtocol::YrcWord> GetCurrentYrcWords() const;
+
+private:
+    LyricManager() = default;
+    int FindCurrentLine(int64_t time) const;
+
+    mutable std::mutex m_mutex;
+
+    SPlayerProtocol::LyricData m_lyricData;
+    SPlayerProtocol::SongInfo m_songInfo;
+
+    int64_t m_currentTime = 0;
+    int m_currentLineIndex = -1;
+    bool m_isPlaying = false;
+};
+
+#define g_lyricMgr LyricManager::Instance()

@@ -1,0 +1,47 @@
+# Build outputs
+.gemini/
+Bin/
+Debug/
+Release/
+x64/
+x86/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+ipch/
+
+# Precompiled headers
+*.pch
+*.ipch
+
+# Node.js (for test script)
+node_modules/
+package-lock.json
+
+# IDE
+.idea/
+*.code-workspace
+
+# Misc
+*.log
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store
+
+# Keep PluginInterface headers
+!PluginInterface.h

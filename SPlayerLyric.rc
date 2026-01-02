@@ -1,0 +1,62 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+#include "afxres.h"
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// English (United States) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_ENU)
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+STRINGTABLE
+BEGIN
+    IDS_PLUGIN_NAME          "SPlayer Lyric"
+    IDS_PLUGIN_DESCRIPTION   "Display SPlayer lyrics on taskbar"
+    IDS_LYRIC_ITEM_NAME      "Lyric"
+    IDS_NOT_CONNECTED        "Not Connected"
+    IDS_NO_LYRIC             "No Lyric"
+END
+
+IDD_OPTIONS_DIALOG DIALOGEX 0, 0, 270, 290
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "SPlayer Lyric Settings"
+FONT 9, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    GROUPBOX        "Connection",IDC_STATIC,7,7,256,35
+    LTEXT           "WebSocket Port:",IDC_STATIC_PORT,14,22,60,8
+    EDITTEXT        IDC_EDIT_PORT,82,19,40,14,ES_AUTOHSCROLL | ES_NUMBER
+    
+    GROUPBOX        "Display",IDC_STATIC,7,47,256,75
+    LTEXT           "Width:",IDC_STATIC_WIDTH,14,62,30,8
+    EDITTEXT        IDC_EDIT_WIDTH,82,59,40,14,ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Font:",IDC_STATIC_FONT,14,80,25,8
+    COMBOBOX        IDC_COMBO_FONT,82,77,170,150,CBS_DROPDOWNLIST | CBS_SORT | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Size:",IDC_STATIC_FONTSIZE,14,98,25,8
+    EDITTEXT        IDC_EDIT_FONTSIZE,82,95,40,14,ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "Bold",IDC_CHECK_BOLD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,135,97,30,10
+    
+    GROUPBOX        "Colors",IDC_STATIC,7,127,256,35
+    LTEXT           "Highlight:",IDC_STATIC_COLOR,14,142,40,8
+    PUSHBUTTON      "Select...",IDC_BTN_COLOR,60,139,50,14
+    LTEXT           "Normal:",IDC_STATIC_NORMAL_COLOR,120,142,35,8
+    PUSHBUTTON      "Select...",IDC_BTN_NORMAL_COLOR,160,139,50,14
+    
+    GROUPBOX        "Lyrics",IDC_STATIC,7,167,256,90
+    CONTROL         "Enable Scrolling",IDC_CHECK_SCROLL,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,180,70,10
+    CONTROL         "Enable YRC (Word Highlight)",IDC_CHECK_YRC,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,100,180,110,10
+    LTEXT           "Time Offset (ms):",IDC_STATIC_OFFSET,14,198,60,8
+    EDITTEXT        IDC_EDIT_OFFSET,82,195,40,14,ES_AUTOHSCROLL
+    LTEXT           "(- delay, + advance)",IDC_STATIC,135,198,80,8
+    CONTROL         "Dual Line Display",IDC_CHECK_DUALLINE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,216,75,10
+    LTEXT           "Second Line:",IDC_STATIC,100,216,50,8
+    COMBOBOX        IDC_COMBO_SECONDLINE,155,213,97,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    
+    DEFPUSHBUTTON   "OK",IDOK,159,269,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,213,269,50,14
+END
+
+#endif
