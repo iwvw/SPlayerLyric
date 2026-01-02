@@ -32,8 +32,14 @@ void LyricManager::UpdateLyrics(const SPlayerProtocol::LyricData& data)
 void LyricManager::UpdateProgress(int64_t currentTime)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_currentTime = currentTime + g_config.Data().lyricOffset;
-    m_currentLineIndex = FindCurrentLine(m_currentTime);
+    m_currentTime = currentTime; // Base time from SPlayer
+    m_lastUpdateTick = GetTickCount64();
+    m_currentLineIndex = FindCurrentLine(GetTimeWithOffset()); // Use helper for indexing
+}
+
+int64_t LyricManager::GetTimeWithOffset() const
+{
+    return m_currentTime + g_config.Data().lyricOffset;
 }
 
 void LyricManager::UpdateSongInfo(const SPlayerProtocol::SongInfo& info)
@@ -227,4 +233,20 @@ int LyricManager::FindCurrentLine(int64_t time) const
     }
 
     return -1;
+}
+
+int64_t LyricManager::GetCurrentTime() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!m_isPlaying)
+    {
+        return m_currentTime + g_config.Data().lyricOffset;
+    }
+    
+    // Extrapolate
+    int64_t elapsed = GetTickCount64() - m_lastUpdateTick;
+    // Cap extrapolation to avoid running too far ahead if connection lost
+    if (elapsed > 2000) elapsed = 2000;
+    
+    return m_currentTime + elapsed + g_config.Data().lyricOffset;
 }

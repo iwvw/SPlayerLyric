@@ -40,7 +40,6 @@ private:
     int m_lyricOffset;
     int m_secondLineType;
     int m_desktopXOffset;
-    int m_desktopTransparency;
     BOOL m_desktopDualLine;
     BOOL m_autoStart;
     BOOL m_hideWhenNotPlaying;

@@ -432,10 +432,40 @@ void LyricDisplayItem::DrawDualLine(HDC dc, int x, int y, int w, int h, bool dar
         int curX = textX1;
         for (size_t i = 0; i < words.size(); ++i)
         {
-            bool isHighlighted = (currentTime >= words[i].startTime);
-            SetTextColor(dc, isHighlighted ? highlightColor : primaryColor);
-            TextOutW(dc, curX, textY1, words[i].text.c_str(), (int)words[i].text.length());
-            curX += wordSizes[i].cx;
+            const auto& word = words[i];
+            int width = wordSizes[i].cx;
+
+            // 1. Draw Normal Text (Background)
+            SetTextColor(dc, primaryColor);
+            TextOutW(dc, curX, textY1, word.text.c_str(), (int)word.text.length());
+
+            // 2. Draw Highlight Text (Foreground with clip)
+            long long endTime = word.startTime + word.duration;
+            double progress = 0.0;
+            
+            if (currentTime >= endTime) 
+                progress = 1.0;
+            else if (currentTime >= word.startTime && word.duration > 0)
+                progress = (double)(currentTime - word.startTime) / word.duration;
+
+            if (progress > 0.001)
+            {
+                int effectiveWidth = (int)(width * progress);
+                if (effectiveWidth > 0)
+                {
+                    int saveId = SaveDC(dc);
+                    HRGN wordClip = CreateRectRgn(curX, y, curX + effectiveWidth, y + lineHeight + 2);
+                    ExtSelectClipRgn(dc, wordClip, RGN_AND);
+                    
+                    SetTextColor(dc, highlightColor);
+                    TextOutW(dc, curX, textY1, word.text.c_str(), (int)word.text.length());
+                    
+                    RestoreDC(dc, saveId);
+                    DeleteObject(wordClip);
+                }
+            }
+
+            curX += width;
         }
         
         SelectClipRgn(dc, NULL);
@@ -740,7 +770,7 @@ void LyricDisplayItem::StartHighFreqRefresh()
     {
         // Create timer with ~100ms interval (10 FPS boost)
         // Using NULL for hwnd makes it a thread timer
-        m_highFreqTimerId = SetTimer(NULL, 0, 100, HighFreqTimerProc);
+        m_highFreqTimerId = SetTimer(NULL, 0, 30, HighFreqTimerProc);
         m_highFreqEnabled = true;
         OutputDebugStringW(L"[SPlayerLyric] High-frequency refresh started\n");
     }

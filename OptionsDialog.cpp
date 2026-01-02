@@ -29,7 +29,7 @@ COptionsDialog::COptionsDialog(CWnd* pParent)
     , m_port(25885), m_width(300), m_fontSize(11), m_dualLineFontSize(9), m_fontName(L"Microsoft YaHei UI"), m_fontBold(FALSE)
     , m_enableScroll(TRUE), m_enableYrc(FALSE), m_highlightColor(RGB(0, 120, 215)), m_normalColor(RGB(180, 180, 180))
     , m_lyricOffset(0), m_secondLineType(0), m_desktopXOffset(60), m_desktopDualLine(FALSE), m_autoStart(TRUE)
-    , m_desktopTransparency(255), m_hideWhenNotPlaying(FALSE), m_adaptiveColor(TRUE)
+    , m_hideWhenNotPlaying(FALSE), m_adaptiveColor(TRUE)
     , m_dualLineAlignment(0)
     , m_darkHighlightColor(RGB(0, 120, 215)), m_darkNormalColor(RGB(200, 200, 200))
     , m_lightHighlightColor(RGB(0, 80, 160)), m_lightNormalColor(RGB(60, 60, 60))
@@ -48,7 +48,6 @@ void COptionsDialog::DoDataExchange(CDataExchange* pDX)
     DDX_Check(pDX, IDC_CHECK_YRC, m_enableYrc);
     DDX_Text(pDX, IDC_EDIT_OFFSET, m_lyricOffset);
     DDX_Text(pDX, IDC_EDIT_DESKTOP_X, m_desktopXOffset);
-    DDX_Text(pDX, IDC_EDIT_DESKTOP_ALPHA, m_desktopTransparency); DDV_MinMaxInt(pDX, m_desktopTransparency, 0, 255);
     DDX_Check(pDX, IDC_CHECK_DESKTOP_DUALLINE, m_desktopDualLine);
     DDX_Check(pDX, IDC_CHECK_AUTOSTART, m_autoStart);
     DDX_Check(pDX, IDC_CHECK_HIDE_NOT_PLAYING, m_hideWhenNotPlaying);
@@ -130,7 +129,7 @@ void COptionsDialog::LoadSettings() {
     m_lyricOffset = config.lyricOffset; m_secondLineType = config.secondLineType;
     m_dualLineAlignment = config.dualLineAlignment;
     m_desktopXOffset = config.desktopXOffset; m_desktopDualLine = config.desktopDualLine ? TRUE : FALSE;
-    m_autoStart = config.autoStart ? TRUE : FALSE; m_desktopTransparency = config.desktopTransparency;
+    m_autoStart = config.autoStart ? TRUE : FALSE;
     m_hideWhenNotPlaying = config.hideWhenNotPlaying ? TRUE : FALSE;
     
     // Load new color settings
@@ -151,7 +150,7 @@ void COptionsDialog::SaveSettings() {
     config.lyricOffset = m_lyricOffset; config.secondLineType = m_secondLineType;
     config.dualLineAlignment = m_dualLineAlignment;
     config.desktopXOffset = m_desktopXOffset; config.desktopDualLine = (m_desktopDualLine != FALSE);
-    config.autoStart = (m_autoStart != FALSE); config.desktopTransparency = m_desktopTransparency;
+    config.autoStart = (m_autoStart != FALSE);
     config.hideWhenNotPlaying = (m_hideWhenNotPlaying != FALSE);
     
     // Save new color settings

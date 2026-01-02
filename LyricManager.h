@@ -30,13 +30,14 @@ public:
     bool IsPlaying() const { return m_isPlaying; }
     int GetCurrentLineIndex() const { return m_currentLineIndex; }
     float GetWordProgress() const;
-    int64_t GetCurrentTime() const { return m_currentTime; }
+    int64_t GetCurrentTime() const;
     
     std::vector<SPlayerProtocol::YrcWord> GetCurrentYrcWords() const;
 
 private:
     LyricManager() = default;
     int FindCurrentLine(int64_t time) const;
+    int64_t GetTimeWithOffset() const;
 
     mutable std::mutex m_mutex;
 
@@ -44,6 +45,7 @@ private:
     SPlayerProtocol::SongInfo m_songInfo;
 
     int64_t m_currentTime = 0;
+    int64_t m_lastUpdateTick = 0;
     int m_currentLineIndex = -1;
     bool m_isPlaying = false;
 };
